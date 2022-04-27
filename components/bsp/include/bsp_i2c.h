@@ -9,6 +9,7 @@
 #include "driver/i2c.h"
 #include "esp_err.h"
 #include "i2c_bus.h"
+#include "bsp_board.h"
 
 #ifndef I2C_ACK_CHECK_EN
 #define I2C_ACK_CHECK_EN    1

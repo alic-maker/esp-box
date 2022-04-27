@@ -11,6 +11,7 @@
 #include "esp_lcd_panel_io.h"
 #include "esp_lcd_panel_vendor.h"
 #include "esp_lcd_panel_ops.h"
+#include "esp_lcd_panel_rgb.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
@@ -115,31 +116,77 @@ static bool lcd_trans_done_cb(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_
 esp_err_t bsp_lcd_init(void)
 {
     const board_res_desc_t *brd = bsp_board_get_description();
-    bsp_spi_lcd_init(&io_handle, lcd_trans_done_cb);
+    if (brd->LCD_IFACE_SPI) {
+        bsp_spi_lcd_init(&io_handle, lcd_trans_done_cb);
 
-    esp_lcd_panel_dev_config_t panel_config = {
-        .reset_gpio_num = brd->GPIO_LCD_RST,
-        .color_space = brd->LCD_COLOR_SPACE,
-        .bits_per_pixel = 16,
-    };
+        esp_lcd_panel_dev_config_t panel_config = {
+            .reset_gpio_num = brd->GPIO_LCD_RST,
+            .color_space = brd->LCD_COLOR_SPACE,
+            .bits_per_pixel = 16,
+        };
 
-    if (!brd->LCD_DISP_IC_ST) {
-        ESP_ERROR_CHECK(esp_lcd_new_panel_nt35510(io_handle, &panel_config, &panel_handle));
-    } else  {
-        ESP_ERROR_CHECK(esp_lcd_new_panel_st7789(io_handle, &panel_config, &panel_handle));
+        if (!brd->LCD_DISP_IC_ST) {
+            ESP_ERROR_CHECK(esp_lcd_new_panel_nt35510(io_handle, &panel_config, &panel_handle));
+        } else  {
+            ESP_ERROR_CHECK(esp_lcd_new_panel_st7789(io_handle, &panel_config, &panel_handle));
+        }
+
+        /**
+         * @brief Configure LCD rotation and mirror
+         *
+         */
+        esp_err_t ret_val = ESP_OK;
+        ret_val |= esp_lcd_panel_reset(panel_handle);
+        ret_val |= esp_lcd_panel_init(panel_handle);
+        ret_val |= esp_lcd_panel_invert_color(panel_handle, brd->LCD_COLOR_INV);
+        ret_val |= esp_lcd_panel_set_gap(panel_handle, 0, 0);
+        ret_val |= esp_lcd_panel_swap_xy(panel_handle, brd->LCD_SWAP_XY);
+        ret_val |= esp_lcd_panel_mirror(panel_handle, brd->LCD_MIRROR_X, brd->LCD_MIRROR_Y);
+    } else {
+        esp_lcd_rgb_panel_config_t panel_config = {
+            .clk_src = LCD_CLK_SRC_PLL160M,
+            .data_width = 16,
+            .disp_gpio_num = brd->GPIO_LCD_DISP_EN,
+            .pclk_gpio_num = brd->GPIO_LCD_PCLK,
+            .vsync_gpio_num = brd->GPIO_LCD_VSYNC,
+            .hsync_gpio_num = brd->GPIO_LCD_HSYNC,
+            .de_gpio_num = brd->GPIO_LCD_DE,
+            .data_gpio_nums = {
+                brd->GPIO_LCD_DATA0,
+                brd->GPIO_LCD_DATA1,
+                brd->GPIO_LCD_DATA2,
+                brd->GPIO_LCD_DATA3,
+                brd->GPIO_LCD_DATA4,
+                brd->GPIO_LCD_DATA5,
+                brd->GPIO_LCD_DATA6,
+                brd->GPIO_LCD_DATA7,
+                brd->GPIO_LCD_DATA8,
+                brd->GPIO_LCD_DATA9,
+                brd->GPIO_LCD_DATA10,
+                brd->GPIO_LCD_DATA11,
+                brd->GPIO_LCD_DATA12,
+                brd->GPIO_LCD_DATA13,
+                brd->GPIO_LCD_DATA14,
+                brd->GPIO_LCD_DATA15,
+            },
+            .timings = {
+                .pclk_hz = brd->LCD_FREQ,
+                .h_res = brd->LCD_WIDTH,
+                .v_res = brd->LCD_HEIGHT,
+                .hsync_back_porch = 40,
+                .hsync_front_porch = 48,
+                .hsync_pulse_width = 40,
+                .vsync_back_porch = 32,
+                .vsync_front_porch = 13,
+                .vsync_pulse_width = 23,
+                .flags.pclk_active_neg = 1,
+            },
+            .flags.fb_in_psram = 1,
+        };
+        esp_lcd_new_rgb_panel(&panel_config, &panel_handle);
+        esp_lcd_panel_reset(panel_handle);
+        esp_lcd_panel_init(panel_handle);
     }
-
-    /**
-     * @brief Configure LCD rotation and mirror
-     *
-     */
-    esp_err_t ret_val = ESP_OK;
-    ret_val |= esp_lcd_panel_reset(panel_handle);
-    ret_val |= esp_lcd_panel_init(panel_handle);
-    ret_val |= esp_lcd_panel_invert_color(panel_handle, brd->LCD_COLOR_INV);
-    ret_val |= esp_lcd_panel_set_gap(panel_handle, 0, 0);
-    ret_val |= esp_lcd_panel_swap_xy(panel_handle, brd->LCD_SWAP_XY);
-    ret_val |= esp_lcd_panel_mirror(panel_handle, brd->LCD_MIRROR_X, brd->LCD_MIRROR_Y);
 
     /**
      * @brief Configure LCD backlight IO.
@@ -194,7 +241,13 @@ esp_err_t bsp_lcd_flush(int x1, int y1, int x2, int y2, const void *p_data, Tick
         return ESP_ERR_TIMEOUT;
     }
 
-    return esp_lcd_panel_draw_bitmap(panel_handle, x1, y1, x2, y2, p_data);
+    esp_lcd_panel_draw_bitmap(panel_handle, x1, y1, x2, y2, p_data);
+
+    const board_res_desc_t *brd = bsp_board_get_description();
+    if (!brd->LCD_IFACE_SPI) {
+        lcd_trans_done_cb(NULL, NULL, NULL);
+    }
+    return ESP_OK;
 }
 
 esp_err_t bsp_lcd_flush_wait_done(TickType_t ticks_to_wait)
@@ -224,5 +277,8 @@ esp_err_t bsp_lcd_set_cb(bool (*trans_done_cb)(void *), void *data)
 esp_err_t bsp_lcd_set_backlight(bool en)
 {
     const board_res_desc_t *brd = bsp_board_get_description();
+    if (GPIO_NUM_NC == brd->GPIO_LCD_BL) {
+        return ESP_ERR_NOT_SUPPORTED;
+    }
     return gpio_set_level(brd->GPIO_LCD_BL, en ? brd->GPIO_LCD_BL_ON : !brd->GPIO_LCD_BL_ON);
 }

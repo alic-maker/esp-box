@@ -12,12 +12,14 @@
 #include "bsp_codec.h"
 #include "esp32_s3_box.h"
 #include "esp32_s3_box_lite.h"
+#include "esp32_s3_rgb_devkit.h"
 
 static const char *TAG = "bsp boards";
 
 static const boards_info_t g_boards_info[] = {
     {BOARD_S3_BOX,      "S3_BOX",      bsp_board_s3_box_init,      bsp_board_s3_box_power_ctrl, bsp_board_s3_box_get_res_desc},
     {BOARD_S3_BOX_LITE, "S3_BOX_LITE", bsp_board_s3_box_lite_init, bsp_board_s3_box_lite_power_ctrl, bsp_board_s3_box_lite_get_res_desc},
+    {BOARD_RGB_DEVKIT,  "RGB_DEVKIT",   bsp_board_rgb_devkit_init,  bsp_board_rgb_devkit_power_ctrl, bsp_board_rgb_devkit_get_res_desc},
 };
 static boards_info_t *g_board = NULL;
 
@@ -35,6 +37,8 @@ static esp_err_t bsp_board_detect()
             g_board = (boards_info_t *)&g_boards_info[BOARD_S3_BOX];
         } else if ((CODEC_DEV_ES7243 | CODEC_DEV_ES8156) == codecs) {
             g_board = (boards_info_t *)&g_boards_info[BOARD_S3_BOX_LITE];
+        } else if (0 == codecs) {
+            g_board = (boards_info_t *)&g_boards_info[BOARD_RGB_DEVKIT];
         } else {
             ESP_LOGE(TAG, "Can't Detect a correct board");
             bsp_i2c_deinit();

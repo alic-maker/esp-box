@@ -88,7 +88,7 @@ esp_err_t indev_get_major_value(indev_data_t *data)
         }
         break;
     case BSP_INDEV_BTN:
-        data->btn_val = bsp_btn_get_state(BOARD_BTN_ID_PREV) << 2 | bsp_btn_get_state(BOARD_BTN_ID_ENTER) << 1 | bsp_btn_get_state(BOARD_BTN_ID_NEXT);
+        data->btn_val = 0;//bsp_btn_get_state(BOARD_BTN_ID_PREV) << 2 | bsp_btn_get_state(BOARD_BTN_ID_ENTER) << 1 | bsp_btn_get_state(BOARD_BTN_ID_NEXT);
         if (data->btn_val) {
             data->pressed = true;
         } else {

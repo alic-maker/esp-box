@@ -35,23 +35,25 @@ static bool g_is_connected = 0;
 
 static esp_err_t esp_box_init(void)
 {
+    esp_err_t ret = ESP_OK;
     const board_res_desc_t *brd = bsp_board_get_description();
     const sys_param_t *param = settings_get_parameter();
+    char cmd_json[768] = {0};
     uint16_t h;
     uint8_t s, v;
     app_pwm_led_get_customize_color(&h, &s, &v);
     uint8_t id_list[8];
     uint8_t cmd_num;
     cmd_num = app_sr_search_cmd_from_user_cmd(SR_CMD_LIGHT_ON, id_list, sizeof(id_list));
-    ESP_RETURN_ON_FALSE(cmd_num > 0, ESP_FAIL, TAG, "not found sr command: light on");
+    ESP_GOTO_ON_FALSE(cmd_num > 0, ESP_OK, default_sr_cmd, TAG, "not found sr command: light on");
     const sr_cmd_t *cmd_light_on = app_sr_get_cmd_from_id(id_list[0]);
     cmd_num = app_sr_search_cmd_from_user_cmd(SR_CMD_LIGHT_OFF, id_list, sizeof(id_list));
-    ESP_RETURN_ON_FALSE(cmd_num > 0, ESP_FAIL, TAG, "not found sr command: light off");
+    ESP_GOTO_ON_FALSE(cmd_num > 0, ESP_OK, default_sr_cmd, TAG, "not found sr command: light off");
     const sr_cmd_t *cmd_light_off = app_sr_get_cmd_from_id(id_list[0]);
     cmd_num = app_sr_search_cmd_from_user_cmd(SR_CMD_CUSTOMIZE_COLOR, id_list, sizeof(id_list));
-    ESP_RETURN_ON_FALSE(cmd_num > 0, ESP_FAIL, TAG, "not found sr command: customize color");
+    ESP_GOTO_ON_FALSE(cmd_num > 0, ESP_OK, default_sr_cmd, TAG, "not found sr command: customize color");
     const sr_cmd_t *cmd_cc = app_sr_get_cmd_from_id(id_list[0]);
-    char cmd_json[768] = {0};
+
     snprintf(cmd_json, sizeof(cmd_json),
              "[{\"status\":1,\"voice\":\"%s\",\"lang\":%u,\"str\":\"%s\"},"
              "{\"status\":0,\"voice\":\"%s\",\"lang\":%u,\"str\":\"%s\"},"
@@ -59,10 +61,19 @@ static esp_err_t esp_box_init(void)
              cmd_light_on->phoneme, param->sr_lang, cmd_light_on->str,
              cmd_light_off->phoneme, param->sr_lang, cmd_light_off->str,
              h, s, v, cmd_cc->phoneme, param->sr_lang, cmd_cc->str);
+default_sr_cmd:
+    snprintf(cmd_json, sizeof(cmd_json),
+             "[{\"status\":1,\"voice\":\"%s\",\"lang\":%u,\"str\":\"%s\"},"
+             "{\"status\":0,\"voice\":\"%s\",\"lang\":%u,\"str\":\"%s\"},"
+             "{\"hue\":%d,\"saturation\":%d,\"value\":%d,\"voice\":\"%s\",\"lang\":%u,\"str\":\"%s\"}]",
+             "cmd_light_on", param->sr_lang, "cmd_light_on",
+             "cmd_light_off", param->sr_lang, "cmd_light_off",
+             h, s, v, "cmd_cc", param->sr_lang, "cmd_cc");
+
     esp_box_light_param_t def_light_param = {
-        .gpio_r = brd->PMOD2->row1[1],
-        .gpio_g = brd->PMOD2->row1[2],
-        .gpio_b = brd->PMOD2->row1[3],
+        .gpio_r = brd->PMOD2 ? brd->PMOD2->row1[1] : -1,
+        .gpio_g = brd->PMOD2 ? brd->PMOD2->row1[2] : -1,
+        .gpio_b = brd->PMOD2 ? brd->PMOD2->row1[3] : -1,
         .hue = 0,
         .brightness = 100,
         .saturation = 100,
@@ -82,7 +93,7 @@ static esp_err_t esp_box_init(void)
                           def_light_param.power, def_light_param.voice_cmd);
 
     esp_box_switch_param_t def_switch_param = {
-        .gpio = brd->PMOD2->row1[0],
+        .gpio = brd->PMOD2 ? brd->PMOD2->row1[0] : -1,
         .active_level = 1,
         .power = false,
         .name = "Switch",
@@ -98,7 +109,7 @@ static esp_err_t esp_box_init(void)
     app_driver_switch_init(def_switch_param.unique_name, def_switch_param.gpio, def_switch_param.active_level, def_switch_param.power, def_switch_param.voice_cmd);
 
     esp_box_fan_param_t def_fan_param = {
-        .gpio = brd->PMOD2->row2[0],
+        .gpio = brd->PMOD2 ? brd->PMOD2->row2[0] : -1,
         .active_level = 1,
         .power = false,
         .name = "Fan",
@@ -113,7 +124,7 @@ static esp_err_t esp_box_init(void)
     esp_box_fan_device_create(def_fan_param, def_fan_cb);
     app_driver_fan_init(def_fan_param.unique_name, def_fan_param.gpio, def_fan_param.power, def_fan_param.voice_cmd);
 
-    return ESP_OK;
+    return ret;
 }
 
 /* This executes in the context of default event loop task */

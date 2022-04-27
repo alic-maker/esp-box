@@ -26,7 +26,7 @@
 
 static const char *TAG = "main";
 
-#define MEMORY_MONITOR 0
+#define MEMORY_MONITOR 1
 
 #if MEMORY_MONITOR
 static void monitor_task(void *arg)
@@ -84,8 +84,10 @@ void app_main(void)
     ESP_ERROR_CHECK(app_player_start("/spiffs/mp3"));
 
     const board_res_desc_t *brd = bsp_board_get_description();
-    app_pwm_led_init(brd->PMOD2->row1[1], brd->PMOD2->row1[2], brd->PMOD2->row1[3]);
+    if (brd->PMOD2) {
+        app_pwm_led_init(brd->PMOD2->row1[1], brd->PMOD2->row1[2], brd->PMOD2->row1[3]);
+    }
     ESP_LOGI(TAG, "speech recognition start");
     app_sr_start(false);
-    app_rmaker_start();
+    // app_rmaker_start();
 }

@@ -12,12 +12,14 @@
 
 #include "ft5x06.h"
 #include "tt21100.h"
+#include "gt1151.h"
 
 static const char *TAG = "indev_tp";
 typedef enum {
     TP_VENDOR_NONE = -1,
     TP_VENDOR_TT = 0,
     TP_VENDOR_FT,
+    TP_VENDOR_GOODIX,
     TP_VENDOR_MAX,
 } tp_vendor_t;
 
@@ -30,6 +32,7 @@ typedef struct {
 static tp_dev_t tp_dev_list[] = {
     { "Parade Tech", 0x24, TP_VENDOR_TT },
     { "Focal Tech", 0x38, TP_VENDOR_FT },
+    { "Goodix Tech", 0x14, TP_VENDOR_GOODIX },
 };
 
 static tp_vendor_t tp_vendor = TP_VENDOR_NONE;
@@ -63,6 +66,9 @@ esp_err_t indev_tp_init(void)
     case TP_VENDOR_FT:
         ret_val |= ft5x06_init();
         break;
+    case TP_VENDOR_GOODIX:
+        ret_val |= gt1151_init();
+        break;
     default:
         break;
     }
@@ -86,6 +92,10 @@ esp_err_t indev_tp_read(uint8_t *tp_num, uint16_t *x, uint16_t *y, uint8_t *btn_
         break;
     case TP_VENDOR_FT:
         ret_val |= ft5x06_read_pos(tp_num, x, y);
+        break;
+    case TP_VENDOR_GOODIX:
+        *tp_num = gt1151_pos_read(x, y);
+        ret_val = ESP_OK;
         break;
     default:
         return ESP_ERR_NOT_FOUND;

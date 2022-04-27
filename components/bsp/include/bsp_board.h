@@ -19,9 +19,14 @@
 extern "C" {
 #endif
 
+#define ets_delay_us(t) esp_rom_delay_us(t)
+#define GPIO_PIN_INTR_DISABLE GPIO_INTR_DISABLE
+#define ets_printf esp_rom_printf
+
 typedef enum {
     BOARD_S3_BOX,
     BOARD_S3_BOX_LITE,
+    BOARD_RGB_DEVKIT,
 } boards_id_t;
 
 typedef enum {
@@ -50,7 +55,7 @@ typedef struct {
      */
     bool FUNC_LCD_EN     ;
     int LCD_BUS_WIDTH   ;
-    int LCD_IFACE_SPI   ;
+    int LCD_IFACE_SPI   ;  // 1: SPI interface; 0: RGB interface
     int LCD_DISP_IC_ST  ;
     int LCD_WIDTH       ;
     int LCD_HEIGHT      ;
@@ -73,7 +78,7 @@ typedef struct {
     int GPIO_LCD_CLK    ;
     int GPIO_LCD_DIN    ;
     int GPIO_LCD_DOUT   ;
-    int GPIO_LCD_D00    ; // only use for OCTAL SPI(aka 8080 interface)
+    int GPIO_LCD_D00    ; // D00 ~ D07 only use for OCTAL SPI(aka 8080 interface)
     int GPIO_LCD_D01    ;
     int GPIO_LCD_D02    ;
     int GPIO_LCD_D03    ;
@@ -81,6 +86,29 @@ typedef struct {
     int GPIO_LCD_D05    ;
     int GPIO_LCD_D06    ;
     int GPIO_LCD_D07    ;
+
+    // RGB interface GPIOs for LCD panel
+    int GPIO_LCD_DISP_EN ;
+    int GPIO_LCD_VSYNC   ;
+    int GPIO_LCD_HSYNC   ;
+    int GPIO_LCD_DE      ;
+    int GPIO_LCD_PCLK    ;
+    int GPIO_LCD_DATA0   ; // B0
+    int GPIO_LCD_DATA1   ; // B1
+    int GPIO_LCD_DATA2   ; // B2
+    int GPIO_LCD_DATA3   ; // B3
+    int GPIO_LCD_DATA4   ; // B4
+    int GPIO_LCD_DATA5   ; // G0
+    int GPIO_LCD_DATA6   ; // G1
+    int GPIO_LCD_DATA7   ; // G2
+    int GPIO_LCD_DATA8   ; // G3
+    int GPIO_LCD_DATA9   ; // G4
+    int GPIO_LCD_DATA10  ; // G5
+    int GPIO_LCD_DATA11  ; // R0
+    int GPIO_LCD_DATA12  ; // R1
+    int GPIO_LCD_DATA13  ; // R2
+    int GPIO_LCD_DATA14  ; // R3
+    int GPIO_LCD_DATA15  ; // R4
 
     bool BSP_INDEV_IS_TP;
     bool TOUCH_PANEL_SWAP_XY;

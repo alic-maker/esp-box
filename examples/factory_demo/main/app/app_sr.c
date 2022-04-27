@@ -26,6 +26,7 @@
 #include "app_sr_handler.h"
 #include "bsp_board.h"
 #include "bsp_btn.h"
+#include "bsp_adc.h"
 #include "settings.h"
 
 static const char *TAG = "app_sr";
@@ -188,6 +189,7 @@ static const sr_cmd_t g_default_cmd_info[] = {
 
 static void audio_feed_task(void *pvParam)
 {
+    const board_res_desc_t *brd = bsp_board_get_description();
     size_t bytes_read = 0;
     const esp_afe_sr_iface_t *afe_handle = g_sr_data->afe_handle;
     esp_afe_sr_data_t *afe_data = (esp_afe_sr_data_t *) pvParam;
@@ -207,8 +209,7 @@ static void audio_feed_task(void *pvParam)
             vTaskDelete(NULL);
         }
 
-        /* Read audio data from I2S bus */
-        i2s_read(I2S_NUM_0, audio_buffer, audio_chunksize * I2S_CHANNEL_NUM * sizeof(int16_t), &bytes_read, portMAX_DELAY);
+        bsp_codec_read(audio_buffer, audio_chunksize * I2S_CHANNEL_NUM * sizeof(int16_t), &bytes_read, portMAX_DELAY);
 
         /* Save audio data to file if record enabled */
         if (g_sr_data->b_record_en && (NULL != g_sr_data->fp)) {

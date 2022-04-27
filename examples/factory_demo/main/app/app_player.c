@@ -21,11 +21,13 @@
 #include "freertos/queue.h"
 
 #include "app_player.h"
+#include "bsp_board.h"
 #include "bsp_i2s.h"
 #include "bsp_codec.h"
 #include "mp3dec.h"
 #include "settings.h"
 #include "file_manager.h"
+#include "pwm_audio.h"
 
 static const char *TAG = "player";
 
@@ -62,6 +64,34 @@ const char *app_player_get_name_from_index(size_t index)
     return g_file_list[index];
 }
 
+static inline void convert_to_stereo(int16_t *output, MP3FrameInfo *frame_info)
+{
+    size_t new_output_sample_count = frame_info->outputSamps * 2;
+
+    // convert from back to front to allow conversion in-place
+    int16_t *out = output + new_output_sample_count;
+    int16_t *in = output + frame_info->outputSamps;
+    size_t samples = frame_info->outputSamps;
+    while (samples) {
+        // write right channel
+        *out = *in;
+        out--;
+
+        // write left channel
+        *out = *in;
+        out--;
+
+        // move input buffer back and decrement samples
+        in--;
+        samples--;
+    }
+
+    // adjust channels to 2
+    frame_info->nChans = 2;
+
+    // recalculate output sample count as its calculated by (channels * samples per frame)
+    frame_info->outputSamps = new_output_sample_count;
+}
 
 static esp_err_t play_mp3(const char *path)
 {
@@ -72,11 +102,12 @@ static esp_err_t play_mp3(const char *path)
     uint32_t bits_cfg = 0;
     uint32_t nChans = 0;
     esp_err_t ret = ESP_OK;
-    uint8_t *output = NULL;
+    int16_t *output = NULL;
     uint8_t *read_buf = NULL;
     MP3FrameInfo frame_info;
     HMP3Decoder mp3_decoder = MP3InitDecoder();
     player_event_t audio_event = AUDIO_EVENT_NONE;
+    const board_res_desc_t *brd = bsp_board_get_description();
 
     ESP_RETURN_ON_FALSE(NULL != mp3_decoder, ESP_ERR_NO_MEM, TAG, "Failed create MP3 decoder");
 
@@ -121,7 +152,7 @@ static esp_err_t play_mp3(const char *path)
         if (pdPASS == xQueueReceive(audio_event_queue, &audio_event, 0)) {
             if (AUDIO_EVENT_PAUSE == audio_event) {
                 g_player_state = PLAYER_STATE_PAUSE;
-                i2s_zero_dma_buffer(I2S_NUM_0);
+                // i2s_zero_dma_buffer(I2S_NUM_0);
                 xQueuePeek(audio_event_queue, &audio_event, portMAX_DELAY);
                 continue;
             }
@@ -129,7 +160,7 @@ static esp_err_t play_mp3(const char *path)
             if (AUDIO_EVENT_CHANGE == audio_event ||
                     AUDIO_EVENT_NEXT == audio_event ||
                     AUDIO_EVENT_PREV == audio_event) {
-                i2s_zero_dma_buffer(I2S_NUM_0);
+                // i2s_zero_dma_buffer(I2S_NUM_0);
                 ret = ESP_FAIL;
                 goto clean_up;
             }
@@ -157,6 +188,12 @@ static esp_err_t play_mp3(const char *path)
             /* Get MP3 frame info and configure I2S clock */
             MP3GetLastFrameInfo(mp3_decoder, &frame_info);
 
+            // if mono, convert to stereo as es8311 requires stereo input
+            // even though it is mono output
+            if (frame_info.nChans ==  1) {
+                convert_to_stereo(output, &frame_info);
+            }
+
             /* Configure I2S clock if sample rate changed. Always reconfigure at first frame */
             if (sample_rate != frame_info.samprate ||
                     nChans != frame_info.nChans ||
@@ -165,15 +202,13 @@ static esp_err_t play_mp3(const char *path)
                 bits_cfg = frame_info.bitsPerSample;
                 nChans = frame_info.nChans;
                 ESP_LOGI(TAG, "audio info: sr=%d, bit=%d, ch=%d", sample_rate, bits_cfg, nChans);
-                i2s_channel_t channel = (nChans == 1) ? I2S_CHANNEL_MONO : I2S_CHANNEL_STEREO;
-                i2s_set_clk(I2S_NUM_0, sample_rate, bits_cfg, channel);
-                // bsp_codec_set_fmt((nChans == 1) ? AUDIO_HAL_I2S_LEFT : AUDIO_HAL_I2S_NORMAL);
+                bsp_codec_set_clk(sample_rate, bits_cfg, nChans);
             }
 
             /* Write decoded data to audio decoder */
             size_t i2s_bytes_written = 0;
             size_t output_size = frame_info.outputSamps * nChans;
-            i2s_write(I2S_NUM_0, output, output_size, &i2s_bytes_written, portMAX_DELAY);
+            bsp_codec_write(output, output_size, &i2s_bytes_written, portMAX_DELAY);
         } else {
             /* Sync word not found in frame. Try to read next frame */
             ESP_LOGE(TAG, "MP3 sync word not found");
@@ -183,8 +218,6 @@ static esp_err_t play_mp3(const char *path)
     } while (true);
 
 clean_up:
-    /* This will prevent from sending dumy data to audio decoder */
-    i2s_zero_dma_buffer(I2S_NUM_0);
 
     /* Clean up resources */
     if (NULL != mp3_decoder) {
@@ -217,6 +250,10 @@ static void audio_task(void *pvParam)
         ESP_LOGW(TAG, "Can't found any mp3 file!");
         vTaskDelete(NULL);
     }
+
+    const board_res_desc_t *brd = bsp_board_get_description();
+    sys_param_t *param = settings_get_parameter();
+    bsp_codec_set_voice_volume(param->volume);
 
     if (esp_ptr_executable(s_audio_cb)) {
         player_cb_ctx_t ctx = {
@@ -343,9 +380,6 @@ esp_err_t app_player_play_index(size_t index)
 /* **************** START AUDIO PLAYER **************** */
 esp_err_t app_player_start(char *file_path)
 {
-    sys_param_t *param = settings_get_parameter();
-    bsp_codec_set_voice_volume(param->volume);
-
     ESP_RETURN_ON_FALSE(NULL != file_path, ESP_ERR_INVALID_ARG, TAG,  "Invalid base path");
     BaseType_t ret_val = xTaskCreatePinnedToCore(audio_task, "Audio Task", 4 * 1024, file_path, configMAX_PRIORITIES - 5, NULL, 1);
     ESP_RETURN_ON_FALSE(pdPASS == ret_val, ESP_FAIL, TAG,  "Failed create audio task");

@@ -27,4 +27,5 @@ idf_component_register(
         fatfs
         i2c_bus
         i2c_devices
-        spiffs)
+        spiffs
+        pwm_audio)

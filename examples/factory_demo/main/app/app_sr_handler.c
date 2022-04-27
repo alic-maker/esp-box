@@ -77,13 +77,11 @@ static esp_err_t sr_echo_play(audio_segment_t audio)
     len = len & 0xfffffffc;
     ESP_LOGD(TAG, "frame_rate=%d, ch=%d, width=%d", wav_head->SampleRate, wav_head->NumChannels, wav_head->BitsPerSample);
 
-    i2s_zero_dma_buffer(I2S_NUM_0);
     vTaskDelay(pdMS_TO_TICKS(50));
     bsp_board_power_ctrl(POWER_MODULE_AUDIO, true);// turn on the speaker
     size_t bytes_written = 0;
     b_audio_playing = true;
-    i2s_write(I2S_NUM_0, p, len, &bytes_written, portMAX_DELAY);
-    i2s_zero_dma_buffer(I2S_NUM_0);
+    bsp_codec_write(p, len, &bytes_written, portMAX_DELAY);
     vTaskDelay(pdMS_TO_TICKS(20));
     b_audio_playing = false;
     return ESP_OK;
