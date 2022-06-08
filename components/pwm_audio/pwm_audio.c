@@ -19,7 +19,6 @@
 #include "freertos/task.h"
 #include "driver/ledc.h"
 #include "esp_err.h"
-#include "esp_timer.h"
 #include "esp_log.h"
 #include "esp_heap_caps.h"
 #include "driver/timer.h"
@@ -540,7 +539,7 @@ esp_err_t pwm_audio_set_param(int rate, ledc_timer_bit_t bits, int ch)
 
     /* Configure the alarm value and the interrupt on alarm. */
     uint32_t divider = REG_GET_FIELD(TIMG_T0CONFIG_REG(handle->config.tg_num) + handle->config.timer_num * 0x24, TIMG_T0_DIVIDER);
-    timer_set_alarm_value(handle->config.tg_num, handle->config.timer_num, (TIMER_BASE_CLK / divider) / handle->framerate);
+    timer_set_alarm_value(handle->config.tg_num, handle->config.timer_num, (80000000 / divider) / handle->framerate);
     // timer_enable_intr(handle->config.tg_num, handle->config.timer_num);
     return res;
 }
@@ -555,7 +554,7 @@ esp_err_t pwm_audio_set_sample_rate(int rate)
     pwm_audio_data_t *handle = g_pwm_audio_handle;
     handle->framerate = rate;
     uint32_t divider = REG_GET_FIELD(TIMG_T0CONFIG_REG(handle->config.tg_num) + handle->config.timer_num * 0x24, TIMG_T0_DIVIDER);
-    res = timer_set_alarm_value(handle->config.tg_num, handle->config.timer_num, (TIMER_BASE_CLK / divider) / handle->framerate);
+    res = timer_set_alarm_value(handle->config.tg_num, handle->config.timer_num, (80000000 / divider) / handle->framerate);
     return res;
 }
 
